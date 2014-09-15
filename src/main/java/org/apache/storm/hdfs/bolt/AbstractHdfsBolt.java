@@ -21,6 +21,7 @@ import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.topology.base.BaseRichBolt;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -35,6 +36,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -54,6 +56,7 @@ public abstract class AbstractHdfsBolt extends BaseRichBolt {
     protected String configKey;
     protected transient Object writeLock;
     protected transient Timer rotationTimer; // only used for TimedRotationPolicy
+    protected Map<String,String> customHdfsConfig = new HashMap<String,String>();
 
     protected transient Configuration hdfsConfig;
 
@@ -92,12 +95,28 @@ public abstract class AbstractHdfsBolt extends BaseRichBolt {
         this.collector = collector;
         this.fileNameFormat.prepare(conf, topologyContext);
         this.hdfsConfig = new Configuration();
-        Map<String, Object> map = (Map<String, Object>)conf.get(this.configKey);
-        if(map != null){
-            for(String key : map.keySet()){
-                this.hdfsConfig.set(key, String.valueOf(map.get(key)));
-            }
-        }
+        
+        //Get all configurations from storm config which starts with "hdfs." and add it to hdfs config
+    for (Object set : conf.entrySet()) {
+      Map.Entry<String, Object> entry = (Map.Entry<String, Object>) set;
+      if (entry.getKey().startsWith("hdfs.")) {
+        hdfsConfig.set(entry.getKey().substring("hdfs.".length()), entry.getValue().toString());
+      }
+    }
+
+    Map<String, Object> map = (Map<String, Object>) conf.get(this.configKey);
+    if (map != null) {
+      for (String key : map.keySet()) {
+        this.hdfsConfig.set(key, String.valueOf(map.get(key)));
+      }
+    }
+
+    //Add all custom configs
+    if (customHdfsConfig != null) {
+      for (String key : customHdfsConfig.keySet()) {
+        this.hdfsConfig.set(key, customHdfsConfig.get(key));
+      }
+    }
 
 
         try{
